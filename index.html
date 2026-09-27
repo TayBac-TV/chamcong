@@ -9,6 +9,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Chấm công">
+<meta name="description" content="Ứng dụng chấm công nhân sự Tây Bắc TV – Chi nhánh Lai Châu">
+<meta property="og:title" content="Chấm công Tây Bắc TV">
+<meta property="og:description" content="Bấm để mở app chấm công của bạn.">
+<meta property="og:image" content="https://taybac-tv.github.io/chamcong/icon-512.png?v=2">
+<meta property="og:type" content="website">
 <link rel="apple-touch-icon" href="icon-180.png?v=2">
 <link rel="icon" type="image/png" href="icon-192.png?v=2">
 <style>
@@ -29,6 +34,7 @@
   select { width:100%; padding:12px; font-size:16px; border-radius:10px; border:1px solid #cfd8d3; margin-top:8px; background:#fff; }
   .btn { width:100%; border:0; border-radius:16px; padding:22px 12px; font-size:20px; font-weight:700; color:#fff; margin-top:16px; }
   .btn.vao { background:var(--xanh); } .btn.ra { background:var(--do); }
+  .btn.tc { background:#fff; color:#b86a00; border:2px solid #f0a500; padding:14px 12px; font-size:17px; margin-top:12px; }
   .btn:disabled { opacity:.5; }
   .msg { padding:12px 14px; border-radius:12px; margin-top:14px; font-size:15px; line-height:1.45; }
   .msg.ok { background:#e3f4ea; color:#0b5a36; } .msg.err { background:#fbe7e5; color:#8e2a1f; } .msg.info { background:#e8eef8; color:#23406e; }
@@ -160,7 +166,7 @@ function render_(s) {
 
   if (s.dangLam) {
     h += '<div class="card"><div class="row"><span>Đang trong <b>' + esc(s.dangLam.ca) + '</b></span><span>Vào lúc ' + s.dangLam.gioVao + '</span></div></div>';
-    h += '<button class="btn ra" id="btnCham" onclick="batDau(\'RA\')">CHẤM RA CA</button>';
+    h += '<button class="btn ra" id="btnCham" onclick="batDau(\'RA\')">' + (s.dangLam.ca === 'Tăng ca' ? 'KẾT THÚC TĂNG CA' : 'CHẤM RA CA') + '</button>';
   } else {
     const ds = s.caHomNay.length ? s.caHomNay : (s.batBuocPhanCa ? [] : s.tatCaCa);
     if (ds.length > 1 || !s.caHomNay.length) {
@@ -168,6 +174,7 @@ function render_(s) {
         ds.map(c => '<option value="' + esc(c.ten) + '">' + esc(c.ten) + ' (' + c.vao + '–' + c.ra + ')</option>').join('') + '</select>';
     }
     h += '<button class="btn vao" id="btnCham" onclick="batDau(\'VAO\')"' + (ds.length ? '' : ' disabled') + '>CHẤM VÀO CA</button>';
+    h += '<button class="btn tc" id="btnTC" onclick="batDau(\'TC\')">⏱ BẮT ĐẦU TĂNG CA</button>';
   }
 
   if (s.lichSu.length) {
@@ -207,12 +214,15 @@ function guiDongY() {
 }
 
 let LOAI = 'VAO';
+let CA_CHON = '';
 function batDau(loai) {
   if (BUSY) return;
+  CA_CHON = loai === 'TC' ? 'Tăng ca' : '';
+  if (loai === 'TC') loai = 'VAO';
   LOAI = loai;
   if (loai === 'VAO') {
     const sel = document.getElementById('chonCa');
-    if (sel && !sel.value && !STATE.caHomNay.length) { msg('err', 'Vui lòng chọn ca làm việc.'); return; }
+    if (!CA_CHON && sel && !sel.value && !STATE.caHomNay.length) { msg('err', 'Vui lòng chọn ca làm việc.'); return; }
   }
   msg('info', 'Mở camera trước – chụp rõ khuôn mặt của bạn.');
   const cam = document.getElementById('cam');
@@ -236,7 +246,7 @@ document.getElementById('cam').addEventListener('change', async function () {
     msg('info', 'Đang gửi chấm công…');
     const sel = document.getElementById('chonCa');
     const p = {
-      token: TOKEN, deviceId: DEV, info: INFO, loai: LOAI, ca: sel ? sel.value : '',
+      token: TOKEN, deviceId: DEV, info: INFO, loai: LOAI, ca: CA_CHON || (sel ? sel.value : ''),
       lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy,
       anh: b64, anhTime: f.lastModified || Date.now(), clientNow: Date.now()
     };
@@ -249,7 +259,7 @@ document.getElementById('cam').addEventListener('change', async function () {
 function ketQua(r) {
   BUSY = false; khoaNut(false);
   if (!r.ok) { if (/^PHIEN:/.test(r.loi)) { nutDangNhap(r.loi); return; } msg('err', esc(r.loi)); return; }
-  let t = '<b>' + (r.loai === 'VAO' ? 'ĐÃ CHẤM VÀO' : 'ĐÃ CHẤM RA') + ' ' + esc(r.ca) + '</b> lúc ' + r.gio + '<br>' + esc(r.ketQua);
+  let t = '<b>' + (r.ca === 'Tăng ca' ? (r.loai === 'VAO' ? 'ĐÃ BẮT ĐẦU' : 'ĐÃ KẾT THÚC') : (r.loai === 'VAO' ? 'ĐÃ CHẤM VÀO' : 'ĐÃ CHẤM RA')) + ' ' + esc(r.ca) + '</b> lúc ' + r.gio + '<br>' + esc(r.ketQua);
   if (r.canhBao) t += '<br><small>Ghi chú: ' + esc(r.canhBao) + '</small>';
   msg('ok', t);
   document.getElementById('preview').style.display = 'none';
