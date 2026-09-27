@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Chấm công Tây Bắc TV</title>
+<meta name="theme-color" content="#0f7b4a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Chấm công">
+<meta name="description" content="Ứng dụng chấm công nhân sự Tây Bắc TV – Chi nhánh Lai Châu">
+<meta property="og:title" content="Chấm công Tây Bắc TV">
+<meta property="og:description" content="Bấm để mở app chấm công của bạn.">
+<meta property="og:image" content="https://taybac-tv.github.io/chamcong/icon-512.png?v=2">
+<meta property="og:type" content="website">
+<link rel="apple-touch-icon" href="icon-180.png?v=2">
+<link rel="icon" type="image/png" href="icon-192.png?v=2">
+<style>
+  :root { --xanh:#0f7b4a; --do:#c0392b; --nen:#f4f6f5; --chu:#1d2521; --phu:#6b7a72; --the:#fff; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--nen); color:var(--chu); }
+  .wrap { max-width:460px; margin:0 auto; padding:16px; }
+  .head { text-align:center; padding:8px 0 4px; }
+  .brand { font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--phu); }
+  .clock { font-size:44px; font-weight:700; font-variant-numeric:tabular-nums; margin:6px 0 0; }
+  .date { color:var(--phu); font-size:14px; }
+  .card { background:var(--the); border-radius:14px; padding:14px 16px; margin-top:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .ten { font-size:19px; font-weight:700; }
+  .ma { color:var(--phu); font-size:13px; }
+  .row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eef1ef; font-size:14px; }
+  .row:last-child { border-bottom:0; }
+  .muted { color:var(--phu); font-size:13px; }
+  select { width:100%; padding:12px; font-size:16px; border-radius:10px; border:1px solid #cfd8d3; margin-top:8px; background:#fff; }
+  .btn { width:100%; border:0; border-radius:16px; padding:22px 12px; font-size:20px; font-weight:700; color:#fff; margin-top:16px; }
+  .btn.vao { background:var(--xanh); } .btn.ra { background:var(--do); }
+  .btn.tc { background:#fff; color:#b86a00; border:2px solid #f0a500; padding:14px 12px; font-size:17px; margin-top:12px; }
+  .btn:disabled { opacity:.5; }
+  .msg { padding:12px 14px; border-radius:12px; margin-top:14px; font-size:15px; line-height:1.45; }
+  .msg.ok { background:#e3f4ea; color:#0b5a36; } .msg.err { background:#fbe7e5; color:#8e2a1f; } .msg.info { background:#e8eef8; color:#23406e; }
+  #preview { width:100%; border-radius:12px; margin-top:12px; display:none; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; background:#eef1ef; }
+  .banner { background:#fff4d6; color:#6b4a00; border-radius:12px; padding:12px 14px; margin-top:12px; font-size:14px; line-height:1.45; }
+  .foot { text-align:center; color:var(--phu); font-size:12px; margin-top:18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="brand" id="brand">Tây Bắc TV</div>
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="date" id="date"></div>
+  </div>
+  <div id="banner"></div>
+  <div id="main"><div class="msg info">Đang tải thông tin…</div></div>
+
+  <input type="file" id="cam" accept="image/*" capture="user" style="display:none">
+  <img id="preview" alt="">
+  <div id="kq"></div>
+  <div class="foot" id="gpsTT"></div>
+  <div class="foot">Ảnh và vị trí chỉ dùng cho mục đích chấm công.</div>
+</div>
+
+<script>
+/* ===== CẤU HÌNH: link Apps Script (/exec) ===== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbwJ-5R5lINn52ix2QU9OtbBGsxCD9nb6Lt22nEVGtesnYZ3oNbXF-tEKq3OvclIL31cew/exec';
+
+function luu(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function doc(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+
+// ---- Mã cá nhân (token): lấy từ link ?t=..., lưu lại cho các lần mở sau ----
+const TOKEN = (function () {
+  const t = (new URLSearchParams(location.search).get('t') || '').replace(/[^a-zA-Z0-9]/g, '');
+  if (t) { luu('tbtv_token', t); return t; }
+  return doc('tbtv_token');
+})();
+
+// ---- Mã thiết bị ----
+let DEV = doc('tbtv_dev'), INFO = '', OFFSET = 0, STATE = null, BUSY = false;
+if (!DEV) { DEV = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)); luu('tbtv_dev', DEV); }
+INFO = navigator.userAgent.slice(0, 150) + ' | ' + screen.width + 'x' + screen.height;
+
+// ---- Manifest: Android dùng manifest.json (chung bộ nhớ với Chrome nên giữ được mã cá nhân).
+// iPhone KHÔNG gắn manifest để Safari lưu nguyên link hiện tại (có ?t=...) khi "Thêm vào MH chính".
+if (!/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+  const l = document.createElement('link'); l.rel = 'manifest'; l.href = 'manifest.json'; document.head.appendChild(l);
+}
+
+// ---- Nhắc cài app / mở bằng trình duyệt ----
+(function () {
+  const ua = navigator.userAgent;
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const trongLark = /Lark|Feishu/i.test(ua);
+  const ios = /iPhone|iPad|iPod/i.test(ua);
+  let h = '';
+  if (trongLark) {
+    h = '<b>Bạn đang mở trong Lark.</b> Để cài app lên màn hình: bấm <b>⋯</b> góc trên → <b>Mở bằng trình duyệt</b>' +
+        (ios ? ' (Safari)' : ' (Chrome)') + ', rồi làm theo hướng dẫn cài đặt.';
+  } else if (!standalone && TOKEN) {
+    h = ios
+      ? '<b>Cài app lên màn hình:</b> bấm nút <b>Chia sẻ</b> (ô vuông có mũi tên ↑) ở thanh dưới → <b>Thêm vào MH chính</b> → <b>Thêm</b>.'
+      : '<b>Cài app lên màn hình:</b> bấm <b>⋮</b> góc trên → <b>Cài đặt ứng dụng</b> / <b>Thêm vào màn hình chính</b>.';
+  }
+  if (h) document.getElementById('banner').innerHTML = '<div class="banner">' + h + '</div>';
+})();
+
+// ---- Đồng hồ theo giờ máy chủ ----
+setInterval(function () {
+  const d = new Date(Date.now() + OFFSET);
+  document.getElementById('clock').textContent = d.toLocaleTimeString('vi-VN', { hour12: false, timeZone: 'Asia/Ho_Chi_Minh' });
+  document.getElementById('date').textContent = d.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' });
+}, 500);
+
+// ---- Gọi máy chủ (Apps Script) ----
+const TEN_API = { layThongTin: 'thongTin', dongYDuLieu: 'dongY', chamCong: 'chamCong' };
+function goi(ham, args, ok) {
+  const data = ham === 'chamCong' ? args[0] : { token: args[0], deviceId: args[1], info: args[2] };
+  const ctl = ('AbortController' in window) ? new AbortController() : null;
+  const t = setTimeout(() => ctl && ctl.abort(), 45000);
+  fetch(API_URL, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow',
+    body: JSON.stringify({ action: TEN_API[ham], data: data }), signal: ctl ? ctl.signal : undefined
+  })
+    .then(r => r.json())
+    .then(v => { clearTimeout(t); if (v && v.chiNhanh) document.getElementById('brand').textContent = 'Tây Bắc TV · ' + v.chiNhanh; ok(v || { ok: false, loi: 'Không nhận được phản hồi.' }); })
+    .catch(e => { clearTimeout(t); ok({ ok: false, loi: (e && e.name === 'AbortError') ? 'Mạng chậm hoặc máy chủ bận. Kéo xuống để tải lại rồi thử lại.' : 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.' }); });
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+function show(id, html) { document.getElementById(id).innerHTML = html; }
+function msg(type, text) { show('kq', '<div class="msg ' + type + '">' + text + '</div>'); }
+function nutDangNhap(loi) {
+  show('main', '<div class="msg err">' + esc(String(loi || '').replace(/^PHIEN: /, '')) + '</div>' +
+    '<div class="card"><div class="muted">Dán <b>link chấm công cá nhân</b> (copy từ tin nhắn Lark công ty gửi):</div>' +
+    '<input id="oLink" style="width:100%;padding:12px;font-size:16px;border-radius:10px;border:1px solid #cfd8d3;margin-top:8px" placeholder="https://...?t=...">' +
+    '<button class="btn vao" style="padding:16px;font-size:17px" onclick="kichHoat()">KÍCH HOẠT</button></div>');
+}
+function kichHoat() {
+  const v = document.getElementById('oLink').value.trim();
+  const m = v.match(/[?&]t=([a-zA-Z0-9]+)/) || v.match(/^([a-zA-Z0-9]{8,})$/);
+  if (!m) { msg('err', 'Link không đúng. Hãy copy nguyên link công ty gửi.'); return; }
+  luu('tbtv_token', m[1]);
+  location.href = location.href.split('?')[0] + '?t=' + m[1];
+}
+function taiThongTin() {
+  if (!TOKEN) { nutDangNhap('Chưa có mã chấm công trên máy này.'); return; }
+  goi('layThongTin', [TOKEN, DEV, INFO], render);
+}
+
+function render(s) {
+  try { render_(s); } catch (e) { show('main', '<div class="msg err">Lỗi hiển thị: ' + esc(e.message) + '</div>'); }
+}
+function render_(s) {
+  STATE = s;
+  if (!s.ok) { if (/^PHIEN:/.test(s.loi)) nutDangNhap(s.loi); else show('main', '<div class="msg err">' + esc(s.loi) + '</div>'); return; }
+  OFFSET = s.serverTime - Date.now();
+  if (s.canDongY) { manDongY(s); return; }
+  batDauGPS();
+  let h = '<div class="card"><div class="ten">' + esc(s.ten) + '</div><div class="ma">' + esc(s.ma) + '</div></div>';
+  if (s.thongBao) h += '<div class="msg info">' + esc(s.thongBao) + '</div>';
+
+  h += '<div class="card"><div class="muted">Ca hôm nay</div>';
+  if (s.caHomNay.length) s.caHomNay.forEach(c => h += '<div class="row"><span>' + esc(c.ten) + '</span><span>' + c.vao + ' – ' + c.ra + '</span></div>');
+  else h += '<div class="row"><span>Chưa có lịch phân ca</span></div>';
+  h += '</div>';
+
+  if (s.dangLam) {
+    h += '<div class="card"><div class="row"><span>Đang trong <b>' + esc(s.dangLam.ca) + '</b></span><span>Vào lúc ' + s.dangLam.gioVao + '</span></div></div>';
+    h += '<button class="btn ra" id="btnCham" onclick="batDau(\'RA\')">' + (s.dangLam.ca === 'Tăng ca' ? 'KẾT THÚC TĂNG CA' : 'CHẤM RA CA') + '</button>';
+  } else {
+    const ds = s.caHomNay.length ? s.caHomNay : (s.batBuocPhanCa ? [] : s.tatCaCa);
+    if (ds.length > 1 || !s.caHomNay.length) {
+      h += '<select id="chonCa"><option value="">— Chọn ca làm việc —</option>' +
+        ds.map(c => '<option value="' + esc(c.ten) + '">' + esc(c.ten) + ' (' + c.vao + '–' + c.ra + ')</option>').join('') + '</select>';
+    }
+    h += '<button class="btn vao" id="btnCham" onclick="batDau(\'VAO\')"' + (ds.length ? '' : ' disabled') + '>CHẤM VÀO CA</button>';
+    h += '<button class="btn tc" id="btnTC" onclick="batDau(\'TC\')">⏱ BẮT ĐẦU TĂNG CA</button>';
+  }
+
+  if (s.lichSu.length) {
+    h += '<div class="card"><div class="muted">Hôm nay đã chấm</div>';
+    s.lichSu.forEach(r => h += '<div class="row"><span>' + esc(r.ca) + '</span><span>' + (r.vao || '--') + ' → ' + (r.ra || '--') +
+      ' <span class="tag">' + esc(r.trangThai) + '</span></span></div>');
+    h += '</div>';
+  }
+  show('main', h);
+  hienGPS();
+}
+
+// ---- Màn hình đồng ý thu thập dữ liệu (lần đầu) ----
+function manDongY(s) {
+  show('main',
+    '<div class="card"><div class="ten">Xin chào ' + esc(s.ten) + '</div><div class="ma">' + esc(s.ma) + '</div></div>' +
+    '<div class="card" style="font-size:14px;line-height:1.55">' +
+    '<b>Thông báo xử lý dữ liệu cá nhân</b><br>' +
+    esc(s.congTy) + ' sử dụng ứng dụng này để ghi nhận thời gian làm việc tại ' + esc(s.chiNhanh) + '. Mỗi lần chấm công, ứng dụng sẽ thu thập:' +
+    '<ul style="padding-left:18px;margin:8px 0"><li>Ảnh chụp khuôn mặt tại thời điểm chấm</li>' +
+    '<li>Vị trí GPS tại thời điểm chấm</li><li>Mã nhận diện điện thoại bạn dùng</li></ul>' +
+    'Dữ liệu chỉ dùng để xác nhận công, tính công/thù lao và được lưu trên hệ thống nội bộ của công ty; ' +
+    'chỉ người quản lý có thẩm quyền được xem. Ứng dụng không theo dõi vị trí ngoài lúc bạn bấm chấm công. ' +
+    'Bạn có quyền yêu cầu xem, chỉnh sửa hoặc xoá dữ liệu bằng cách liên hệ quản lý chi nhánh.</div>' +
+    '<label class="card" style="display:flex;gap:10px;align-items:flex-start;font-size:15px">' +
+    '<input type="checkbox" id="ckDongY" style="width:22px;height:22px;margin-top:2px" onchange="document.getElementById(\'btnDongY\').disabled=!this.checked">' +
+    '<span>Tôi đã đọc và đồng ý cho thu thập, xử lý các dữ liệu trên phục vụ chấm công.</span></label>' +
+    '<button class="btn vao" id="btnDongY" disabled onclick="guiDongY()">ĐỒNG Ý VÀ TIẾP TỤC</button>');
+}
+function guiDongY() {
+  const b = document.getElementById('btnDongY');
+  b.disabled = true; b.textContent = 'ĐANG XỬ LÝ…';
+  goi('dongYDuLieu', [TOKEN, DEV, INFO], s => {
+    if (!s.ok) { b.disabled = false; b.textContent = 'ĐỒNG Ý VÀ TIẾP TỤC'; msg('err', esc(s.loi)); return; }
+    render(s);
+  });
+}
+
+let LOAI = 'VAO';
+let CA_CHON = '';
+function batDau(loai) {
+  if (BUSY) return;
+  CA_CHON = loai === 'TC' ? 'Tăng ca' : '';
+  if (loai === 'TC') loai = 'VAO';
+  LOAI = loai;
+  if (loai === 'VAO') {
+    const sel = document.getElementById('chonCa');
+    if (!CA_CHON && sel && !sel.value && !STATE.caHomNay.length) { msg('err', 'Vui lòng chọn ca làm việc.'); return; }
+  }
+  msg('info', 'Mở camera trước – chụp rõ khuôn mặt của bạn.');
+  const cam = document.getElementById('cam');
+  cam.value = '';
+  cam.click(); // phải gọi trực tiếp trong thao tác bấm để iPhone cho mở camera
+}
+
+document.getElementById('cam').addEventListener('change', async function () {
+  const f = this.files && this.files[0];
+  if (!f) return;
+  if (f.lastModified && Date.now() - f.lastModified > 3 * 60 * 1000) {
+    msg('err', 'Ảnh không phải vừa chụp. Hãy chụp trực tiếp bằng camera.'); return;
+  }
+  BUSY = true; khoaNut(true);
+  try {
+    const b64 = await nenAnh(f);
+    const img = document.getElementById('preview');
+    img.src = 'data:image/jpeg;base64,' + b64; img.style.display = 'block';
+    msg('info', 'Đang lấy vị trí GPS… (giữ màn hình mở)');
+    const pos = await layGPS();
+    msg('info', 'Đang gửi chấm công…');
+    const sel = document.getElementById('chonCa');
+    const p = {
+      token: TOKEN, deviceId: DEV, info: INFO, loai: LOAI, ca: CA_CHON || (sel ? sel.value : ''),
+      lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy,
+      anh: b64, anhTime: f.lastModified || Date.now(), clientNow: Date.now()
+    };
+    goi('chamCong', [p], ketQua);
+  } catch (e) {
+    ketQua({ ok: false, loi: e.message || String(e) });
+  }
+});
+
+function ketQua(r) {
+  BUSY = false; khoaNut(false);
+  if (!r.ok) { if (/^PHIEN:/.test(r.loi)) { nutDangNhap(r.loi); return; } msg('err', esc(r.loi)); return; }
+  let t = '<b>' + (r.ca === 'Tăng ca' ? (r.loai === 'VAO' ? 'ĐÃ BẮT ĐẦU' : 'ĐÃ KẾT THÚC') : (r.loai === 'VAO' ? 'ĐÃ CHẤM VÀO' : 'ĐÃ CHẤM RA')) + ' ' + esc(r.ca) + '</b> lúc ' + r.gio + '<br>' + esc(r.ketQua);
+  if (r.canhBao) t += '<br><small>Ghi chú: ' + esc(r.canhBao) + '</small>';
+  msg('ok', t);
+  document.getElementById('preview').style.display = 'none';
+  taiThongTin();
+}
+
+function khoaNut(on) { const b = document.getElementById('btnCham'); if (b) b.disabled = on; }
+
+// ---- GPS: bắt đầu dò ngay khi mở app, đến lúc chấm là có sẵn vị trí ----
+let GPS_TOT = null, GPS_LOI = null, GPS_WATCH = null;
+const GPS_DAT = 200; // sai số chấp nhận (m), khớp với cấu hình máy chủ
+function batDauGPS() {
+  if (GPS_WATCH !== null || !navigator.geolocation) return;
+  GPS_WATCH = navigator.geolocation.watchPosition(p => {
+    GPS_LOI = null;
+    // giữ vị trí chính xác nhất, hoặc vị trí mới hơn nếu vị trí cũ đã quá 30 giây
+    if (!GPS_TOT || p.coords.accuracy <= GPS_TOT.coords.accuracy || Date.now() - GPS_TOT.timestamp > 30000) GPS_TOT = p;
+    hienGPS();
+  }, e => { GPS_LOI = e; hienGPS(); }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 60000 });
+}
+function hienGPS() {
+  const el = document.getElementById('gpsTT');
+  if (!el) return;
+  if (GPS_TOT) {
+    const a = Math.round(GPS_TOT.coords.accuracy);
+    el.innerHTML = (a <= GPS_DAT ? '🟢' : '🟡') + ' GPS sẵn sàng (±' + a + 'm)';
+  } else if (GPS_LOI && GPS_LOI.code === 1) el.innerHTML = '🔴 Chưa cho phép truy cập vị trí';
+  else el.innerHTML = '⏳ Đang dò GPS…';
+}
+function layGPS() {
+  return new Promise((ok, loi) => {
+    if (!navigator.geolocation) return loi(new Error('Điện thoại không hỗ trợ định vị.'));
+    batDauGPS();
+    const batDau = Date.now();
+    (function cho() {
+      const tuoi = GPS_TOT ? Date.now() - GPS_TOT.timestamp : Infinity;
+      if (GPS_TOT && tuoi < 60000 && GPS_TOT.coords.accuracy <= GPS_DAT) return ok(GPS_TOT);   // có sẵn -> dùng ngay
+      if (GPS_LOI && GPS_LOI.code === 1) return loi(new Error('Bạn chưa cho phép truy cập vị trí. Vào Cài đặt → Lark → Vị trí → "Khi dùng ứng dụng", rồi mở lại.'));
+      if (Date.now() - batDau > 12000) {                                                     // quá 12 giây
+        if (GPS_TOT && tuoi < 120000) return ok(GPS_TOT);                                    // dùng vị trí tốt nhất đang có
+        return navigator.geolocation.getCurrentPosition(ok, () =>
+          loi(new Error('Không lấy được GPS. Bật Định vị, ra gần cửa/cửa sổ rồi thử lại.')),
+          { enableHighAccuracy: false, maximumAge: 120000, timeout: 10000 });                // thử định vị nhanh qua Wi-Fi/mạng
+      }
+      setTimeout(cho, 300);
+    })();
+  });
+}
+
+// Thu nhỏ ảnh (tối đa 720px) + đóng dấu giờ, tên -> base64 JPEG
+function nenAnh(file) {
+  return new Promise((ok, loi) => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => {
+      const max = 720, k = Math.min(1, max / Math.max(im.width, im.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      const g = c.getContext('2d');
+      g.drawImage(im, 0, 0, c.width, c.height);
+      const d = new Date(Date.now() + OFFSET);
+      const nhan = (STATE ? STATE.ten + ' · ' : '') + d.toLocaleString('vi-VN', { hour12: false, timeZone: 'Asia/Ho_Chi_Minh' });
+      g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, c.height - 34, c.width, 34);
+      g.fillStyle = '#fff'; g.font = 'bold 18px Arial'; g.fillText(nhan, 10, c.height - 11);
+      URL.revokeObjectURL(url);
+      ok(c.toDataURL('image/jpeg', 0.72).split(',')[1]);
+    };
+    im.onerror = () => loi(new Error('Không đọc được ảnh.'));
+    im.src = url;
+  });
+}
+
+
+taiThongTin();
+if (TOKEN) batDauGPS();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
