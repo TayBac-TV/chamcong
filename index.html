@@ -41,6 +41,11 @@
   #preview { width:100%; border-radius:12px; margin-top:12px; display:none; }
   .tag { display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; background:#eef1ef; }
   .banner { background:#fff4d6; color:#6b4a00; border-radius:12px; padding:12px 14px; margin-top:12px; font-size:14px; line-height:1.45; }
+  .sec { font-size:13px; color:var(--phu); margin:20px 4px 8px; letter-spacing:.04em; text-transform:uppercase; }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .st2 { background:var(--the); border-radius:14px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .st2 .v { font-size:26px; font-weight:800; font-variant-numeric:tabular-nums; } .st2 .v small { font-size:14px; }
+  .st2 .l { font-size:12px; color:var(--phu); margin-top:2px; }
   .foot { text-align:center; color:var(--phu); font-size:12px; margin-top:18px; }
 </style>
 </head>
@@ -182,6 +187,14 @@ function render_(s) {
     s.lichSu.forEach(r => h += '<div class="row"><span>' + esc(r.ca) + '</span><span>' + (r.vao || '--') + ' → ' + (r.ra || '--') +
       ' <span class="tag">' + esc(r.trangThai) + '</span></span></div>');
     h += '</div>';
+  }
+  if (s.thangNay) {
+    const t = s.thangNay;
+    h += '<div class="sec">Tháng ' + t.thang + ' của bạn</div><div class="stats">' +
+      '<div class="st2"><div class="v">' + t.ngayCong + '</div><div class="l">Ngày công</div></div>' +
+      '<div class="st2"><div class="v">' + t.gioLam + '<small>h</small></div><div class="l">Giờ làm</div></div>' +
+      '<div class="st2"><div class="v" style="color:' + (t.veSom ? '#b86a00' : 'inherit') + '">' + t.veSom + '</div><div class="l">Lần về sớm</div></div>' +
+      '<div class="st2"><div class="v" style="color:' + (t.muon ? '#c0392b' : 'inherit') + '">' + t.muon + '</div><div class="l">Lần đi muộn</div></div></div>';
   }
   show('main', h);
   hienGPS();
